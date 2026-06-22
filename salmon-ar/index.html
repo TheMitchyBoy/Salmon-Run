@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Ketchikan Creek — Salmon AR</title>
+
+  <!-- 1) A-Frame core. 1.6.0 is the version MindAR's current quick-start pairs with.
+          If anything renders oddly, drop to 1.5.0 — both are known-good with mind-ar 1.2.5. -->
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+
+  <!-- 2) MindAR image-tracking, A-Frame build. This is what watches the camera for your printed sign. -->
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <!-- 3) aframe-extras gives you the "animation-mixer" component, which plays the swim
+          animation baked into your GLB salmon model. -->
+  <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+
+  <style>
+    /* Keep the UI almost invisible — the salmon are the thing people should look at. */
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; }
+
+    #status {
+      position: fixed;
+      top: env(safe-area-inset-top, 12px);
+      left: 50%;
+      transform: translateX(-50%);
+      margin-top: 12px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      background: rgba(12, 28, 40, 0.72);
+      color: #eaf4f4;
+      font-size: 15px;
+      letter-spacing: 0.2px;
+      z-index: 10;
+      backdrop-filter: blur(6px);
+      transition: opacity 0.3s ease;
+    }
+    #status .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #4cd2b0;
+      margin-right: 7px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Status pill. Starts as an instruction, switches to "running" once the sign is detected. -->
+  <div id="status"><span class="dot"></span>Point your phone at the salmon sign</div>
+
+  <a-scene
+    mindar-image="imageTargetSrc: ./targets.mind; autoStart: true;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+
+    <a-assets>
+      <!-- Swap this for your real salmon model. Must be a .glb with a swim animation clip baked in. -->
+      <a-asset-item id="salmon" src="./salmon.glb"></a-asset-item>
+    </a-assets>
+
+    <!-- A camera with no look-controls — MindAR drives the view from the marker. -->
+    <a-camera position="0 0 0" look-controls="false"></a-camera>
+
+    <!-- Everything inside this entity is anchored to image target #0 (your first/only sign).
+         The marker is normalized so its WIDTH = 1 unit. So positions live roughly in
+         -0.5..0.5 on X, and your fish scale will be small. Tune to taste. -->
+    <a-entity mindar-image-target="targetIndex: 0">
+
+      <!-- Three salmon swimming "upstream" across the marker, staggered so they don't move in lockstep.
+           - animation-mixer  -> plays the swim clip inside the GLB (tail motion).
+           - animation         -> drifts the fish across the marker and loops.
+           - rotation          -> orient the model; depends on how YOUR glb was exported. Tune this. -->
+      <a-gltf-model
+        src="#salmon"
+        scale="0.12 0.12 0.12"
+        rotation="0 90 0"
+        position="-0.6 -0.15 0.05"
+        animation-mixer="timeScale: 1"
+        animation="property: position; from: -0.6 -0.15 0.05; to: 0.6 -0.15 0.05; dur: 7000; loop: true; easing: linear">
+      </a-gltf-model>
+
+      <a-gltf-model
+        src="#salmon"
+        scale="0.10 0.10 0.10"
+        rotation="0 90 0"
+        position="-0.6 0.05 0.02"
+        animation-mixer="timeScale: 1.15"
+        animation="property: position; from: -0.6 0.05 0.02; to: 0.6 0.05 0.02; dur: 8500; loop: true; easing: linear; delay: 1500">
+      </a-gltf-model>
+
+      <a-gltf-model
+        src="#salmon"
+        scale="0.14 0.14 0.14"
+        rotation="0 90 0"
+        position="-0.6 0.22 0.07"
+        animation-mixer="timeScale: 0.9"
+        animation="property: position; from: -0.6 0.22 0.07; to: 0.6 0.22 0.07; dur: 6000; loop: true; easing: linear; delay: 800">
+      </a-gltf-model>
+
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const sceneEl = document.querySelector('a-scene');
+    const status = document.getElementById('status');
+
+    // MindAR fires these events on the target entity when it finds / loses your sign.
+    sceneEl.addEventListener('loaded', () => {
+      const target = document.querySelector('[mindar-image-target]');
+
+      target.addEventListener('targetFound', () => {
+        status.innerHTML = '<span class="dot"></span>The salmon are running';
+      });
+
+      target.addEventListener('targetLost', () => {
+        status.innerHTML = '<span class="dot"></span>Point your phone at the salmon sign';
+      });
+    });
+  </script>
+</body>
+</html>
