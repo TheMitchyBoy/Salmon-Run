@@ -40,20 +40,37 @@ works, your environment is fine and the issue is your local assets.
 
 ## Deploy
 
-### Automatic (GitHub Pages — recommended, no extra accounts)
-This repo includes a GitHub Actions workflow (`.github/workflows/deploy.yml`)
-that publishes the site to **GitHub Pages over HTTPS on every push to `main`**.
-HTTPS is mandatory — the camera (and therefore WebAR) is blocked on `file://`
-and plain `http://`, which is the usual reason the app "won't run".
+### Railway (recommended)
+This repo is set up to run on [Railway](https://railway.app) as a tiny static
+server. Railway serves the app over **https://**, which the camera (and therefore
+WebAR) requires — opening the files over `file://` or plain `http://` blocks the
+camera and is the usual reason the app "won't run".
 
-First-time setup (one click):
-1. Push to `main` (the workflow tries to enable Pages automatically).
-2. In the repo, open **Settings → Pages** and set **Source = GitHub Actions**
-   if it isn't already.
-3. Open the **Actions** tab and wait for the "Deploy to GitHub Pages" run to
-   finish (green check).
-4. Your live URL is **https://themitchyboy.github.io/Salmon-AR/** — open it on
-   your phone and tap **Allow** when asked for the camera.
+How it works:
+- `server.js` — a zero-dependency Node static server that serves `index.html`
+  and the assets on the `$PORT` Railway provides.
+- `package.json` — `npm start` runs the server (Node 18+).
+- `railway.json` — tells Railway to build with Nixpacks and run `npm start`.
+
+Steps:
+1. Go to [railway.app](https://railway.app) → **New Project** →
+   **Deploy from GitHub repo** → pick this repo.
+2. Railway auto-detects Node, installs, and runs `npm start`. No env vars needed
+   (`PORT` is injected automatically).
+3. In the service's **Settings → Networking**, click **Generate Domain** to get
+   a public `https://…up.railway.app` URL.
+4. Open that URL on your phone and tap **Allow** when asked for the camera.
+
+Every push to the connected branch redeploys automatically.
+
+#### Run it locally
+```
+npm start            # serves on http://localhost:8080
+# or pick a port:
+PORT=3000 npm start
+```
+`http://localhost` is treated as a secure context, so the camera works locally
+too.
 
 ### Alternative (Netlify / Vercel)
 Connect the repo to Netlify or Vercel (free) — every push auto-deploys to https.

@@ -1,0 +1,12 @@
+{
+  "name": "salmon-ar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WebAR demo overlaying animated salmon on a printed image marker (A-Frame + MindAR).",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
