@@ -9,10 +9,21 @@
     window.salmonAR = { scriptErrors: [] };
     window.salmonAR.scriptFailed = function (src) { window.salmonAR.scriptErrors.push(src); };
   </script>
-  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"
-          onerror="window.salmonAR.scriptFailed('A-Frame (aframe.io)')"></script>
+  <!-- jsDelivr primary + a second-CDN fallback (document.write preserves load order).
+       A-Frame's own host (aframe.io) is avoided — it is the usual cause of a
+       "Couldn't load required libraries" failure. -->
+  <script src="https://cdn.jsdelivr.net/npm/aframe@1.6.0/dist/aframe-master.min.js"
+          onerror="window.salmonAR.scriptFailed('A-Frame (jsdelivr)')"></script>
+  <script>
+    window.AFRAME || (window.salmonAR.scriptFailed('A-Frame (jsdelivr)'),
+      document.write('<script src="https://unpkg.com/aframe@1.6.0/dist/aframe-master.min.js"><\/script>'));
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"
-          onerror="window.salmonAR.scriptFailed('MindAR (cdn.jsdelivr.net)')"></script>
+          onerror="window.salmonAR.scriptFailed('MindAR (jsdelivr)')"></script>
+  <script>
+    (window.AFRAME && AFRAME.components['mindar-image']) || (window.salmonAR.scriptFailed('MindAR (jsdelivr)'),
+      document.write('<script src="https://unpkg.com/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"><\/script>'));
+  </script>
 
   <style>
     body { margin: 0; font-family: -apple-system, system-ui, sans-serif; }
@@ -118,10 +129,10 @@
     } else if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       showFatal('Camera not available', 'This browser does not expose a camera API.',
         ['Open in Safari (iOS) or Chrome (Android). Avoid in-app browsers.']);
-    } else if (window.salmonAR.scriptErrors.length || typeof AFRAME === 'undefined') {
-      const failed = window.salmonAR.scriptErrors.length ? window.salmonAR.scriptErrors : ['A-Frame / MindAR'];
-      showFatal("Couldn't load required libraries", 'A required script did not load.',
-        ['Failed: <code>' + failed.join('</code>, <code>') + '</code>.', 'Check your connection; the CDNs may be blocked on this network.']);
+    } else if (typeof AFRAME === 'undefined' || !(AFRAME.components && AFRAME.components['mindar-image'])) {
+      const missing = (typeof AFRAME === 'undefined') ? ['A-Frame'] : ['MindAR'];
+      showFatal("Couldn't load required libraries", 'A required library did not load — even after trying a backup CDN.',
+        ['Missing: <code>' + missing.join('</code>, <code>') + '</code>.', 'Check your connection; the CDNs (cdn.jsdelivr.net, unpkg.com) may be blocked on this network.']);
     }
 
     if (!fatalShown && typeof AFRAME !== 'undefined') {

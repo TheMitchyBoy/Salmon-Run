@@ -15,19 +15,38 @@
     };
   </script>
 
+  <!-- Libraries are loaded from jsDelivr (a hardened, high-availability CDN) with a
+       second-CDN fallback each. We deliberately avoid A-Frame's own host
+       (aframe.io): it is prone to outages / rate-limiting, which previously left
+       the app stuck on "Couldn't load required libraries". Each fallback uses the
+       classic document.write pattern so load ORDER is preserved — A-Frame must be
+       present before MindAR and aframe-extras run. -->
+
   <!-- 1) A-Frame core. 1.6.0 is the version MindAR's current quick-start pairs with.
           If anything renders oddly, drop to 1.5.0 — both are known-good with mind-ar 1.2.5. -->
-  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"
-          onerror="window.salmonAR.scriptFailed('A-Frame (aframe.io)')"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe@1.6.0/dist/aframe-master.min.js"
+          onerror="window.salmonAR.scriptFailed('A-Frame (jsdelivr)')"></script>
+  <script>
+    window.AFRAME || (window.salmonAR.scriptFailed('A-Frame (jsdelivr)'),
+      document.write('<script src="https://unpkg.com/aframe@1.6.0/dist/aframe-master.min.js"><\/script>'));
+  </script>
 
   <!-- 2) MindAR image-tracking, A-Frame build. This is what watches the camera for your printed sign. -->
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"
-          onerror="window.salmonAR.scriptFailed('MindAR (cdn.jsdelivr.net)')"></script>
+          onerror="window.salmonAR.scriptFailed('MindAR (jsdelivr)')"></script>
+  <script>
+    (window.AFRAME && AFRAME.components['mindar-image']) || (window.salmonAR.scriptFailed('MindAR (jsdelivr)'),
+      document.write('<script src="https://unpkg.com/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"><\/script>'));
+  </script>
 
   <!-- 3) aframe-extras gives you the "animation-mixer" component, which plays the swim
           animation baked into your GLB salmon model. -->
   <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"
-          onerror="window.salmonAR.scriptFailed('aframe-extras (cdn.jsdelivr.net)')"></script>
+          onerror="window.salmonAR.scriptFailed('aframe-extras (jsdelivr)')"></script>
+  <script>
+    (window.AFRAME && AFRAME.components['animation-mixer']) ||
+      document.write('<script src="https://rawcdn.githack.com/c-frame/aframe-extras/v7.2.0/dist/aframe-extras.min.js"><\/script>');
+  </script>
 
   <style>
     /* Keep the UI almost invisible — the salmon are the thing people should look at. */
@@ -247,18 +266,18 @@
       );
     }
 
-    // 3) A required CDN script failed to load (offline, blocked, or CDN down).
-    else if (window.salmonAR.scriptErrors.length || typeof AFRAME === 'undefined') {
-      const failed = window.salmonAR.scriptErrors.length
-        ? window.salmonAR.scriptErrors
-        : ['A-Frame / MindAR'];
+    // 3) A required library is genuinely missing (primary AND fallback CDN failed).
+    //    We check the actual capability, not just the onerror flags, so a primary
+    //    failure that recovered via the fallback CDN does NOT show a false error.
+    else if (typeof AFRAME === 'undefined' || !(AFRAME.components && AFRAME.components['mindar-image'])) {
+      const missing = (typeof AFRAME === 'undefined') ? ['A-Frame'] : ['MindAR'];
       showFatal(
         "Couldn't load required libraries",
-        'One or more scripts this app depends on did not load.',
+        'A library this app depends on did not load — even after trying a backup CDN.',
         [
-          'Failed to load: <code>' + failed.join('</code>, <code>') + '</code>.',
+          'Missing: <code>' + missing.join('</code>, <code>') + '</code>.',
           'Check your internet connection and reload.',
-          'If you are on a restricted network, the CDNs (<code>aframe.io</code>, <code>cdn.jsdelivr.net</code>) may be blocked.'
+          'If you are on a restricted network, the CDNs (<code>cdn.jsdelivr.net</code>, <code>unpkg.com</code>) may be blocked.'
         ]
       );
     }

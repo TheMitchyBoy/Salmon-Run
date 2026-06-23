@@ -25,8 +25,10 @@ The most common reasons the page sits on a spinner, in order:
    over `https://` (GitHub Pages / Netlify / Vercel) or `http://localhost`.
 2. **Camera permission denied/dismissed** — reload and tap **Allow**. If you
    blocked it before, clear the site permission in your browser and reload.
-3. **CDN blocked / offline** — `aframe.io` and `cdn.jsdelivr.net` must be
-   reachable.
+3. **CDN blocked / offline** — the libraries load from `cdn.jsdelivr.net` with a
+   fallback to `unpkg.com` (and `rawcdn.githack.com` for aframe-extras). At least
+   one must be reachable. (A-Frame is intentionally NOT loaded from `aframe.io`,
+   which is prone to outages.)
 4. **Another app/tab holding the camera** — close it and reload.
 
 If you see the salmon template hang but want to confirm your setup, deploy
