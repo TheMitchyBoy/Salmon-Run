@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TheMitchyBoy/Salmon-AR/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="https://github.com/TheMitchyBoy/Salmon-Run/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white" alt="Node.js 18+" /></a>
   <a href="https://aframe.io/"><img src="https://img.shields.io/badge/A--Frame-1.6.0-EF2D5E" alt="A-Frame 1.6.0" /></a>
   <a href="https://hiukim.github.io/mind-ar-js-doc/"><img src="https://img.shields.io/badge/MindAR-1.2.5-4cd2b0" alt="MindAR 1.2.5" /></a>
@@ -53,8 +53,8 @@
 ### Try it locally
 
 ```bash
-git clone https://github.com/TheMitchyBoy/Salmon-AR.git
-cd Salmon-AR
+git clone https://github.com/TheMitchyBoy/Salmon-Run.git
+cd Salmon-Run
 npm start
 ```
 
@@ -88,7 +88,7 @@ flowchart LR
 ## Project structure
 
 ```
-Salmon-AR/
+Salmon-Run/
 ├── index.html           # Main WebAR experience
 ├── loading-test.html    # Pipeline smoke test (MindAR example assets)
 ├── salmon.glb           # 3D salmon model
@@ -109,7 +109,7 @@ Salmon-AR/
 
 This repo is configured for [Railway](https://railway.app) out of the box. Railway terminates TLS, which WebAR requires for camera access.
 
-1. **New Project** → **Deploy from GitHub repo** → select **Salmon-AR**
+1. **New Project** → **Deploy from GitHub repo** → select **Salmon-Run**
 2. Railway detects Node, runs `npm start` (no env vars needed — `PORT` is injected)
 3. **Settings → Networking** → **Generate Domain** for a public `https://…up.railway.app` URL
 4. Open the URL on your phone and tap **Allow** for the camera

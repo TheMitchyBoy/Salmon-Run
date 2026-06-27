@@ -12,8 +12,8 @@ Thanks for your interest in improving Salmon AR! This project is intentionally s
 ## Development setup
 
 ```bash
-git clone https://github.com/TheMitchyBoy/Salmon-AR.git
-cd Salmon-AR
+git clone https://github.com/TheMitchyBoy/Salmon-Run.git
+cd Salmon-Run
 npm start
 ```
 
@@ -34,4 +34,4 @@ Open http://localhost:8080. No install step — there are no npm dependencies be
 
 ## Questions
 
-Open a [GitHub issue](https://github.com/TheMitchyBoy/Salmon-AR/issues) for questions or ideas before large refactors.
+Open a [GitHub issue](https://github.com/TheMitchyBoy/Salmon-Run/issues) for questions or ideas before large refactors.
