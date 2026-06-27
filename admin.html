@@ -195,12 +195,22 @@
       refreshBtn: document.getElementById('refresh-btn'),
     };
 
-    function authHeaders() {
-      return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    function authHeaders(jsonBody = true) {
+      const headers = { Authorization: `Bearer ${token}` };
+      if (jsonBody) headers['Content-Type'] = 'application/json';
+      return headers;
     }
 
     async function api(path, options = {}) {
-      const res = await fetch(path, options);
+      let res;
+      try {
+        res = await fetch(path, options);
+      } catch (err) {
+        throw new Error(
+          'Network error — server unreachable or upload too large. ' +
+          'Try fewer/smaller images, sign in again, and confirm ADMIN_PASSWORD is set on Railway.'
+        );
+      }
       const isJson = (res.headers.get('content-type') || '').includes('application/json');
       const body = isJson ? await res.json() : null;
       if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`);
@@ -322,19 +332,18 @@
       if (!compiledBuffer) return;
       setStatus(els.compileStatus, 'Uploading…', '');
       try {
-        const bytes = new Uint8Array(compiledBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-        const mindBase64 = btoa(binary);
+        const name = els.setName.value.trim() || `Target set ${new Date().toLocaleString()}`;
+        const imageNames = pendingFiles.map((f) => f.name);
 
         await api('/api/targets', {
           method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({
-            name: els.setName.value.trim() || `Target set ${new Date().toLocaleString()}`,
-            imageNames: pendingFiles.map((f) => f.name),
-            mindBase64,
-          }),
+          headers: {
+            ...authHeaders(false),
+            'Content-Type': 'application/octet-stream',
+            'X-Target-Name': encodeURIComponent(name),
+            'X-Image-Names': encodeURIComponent(JSON.stringify(imageNames)),
+          },
+          body: compiledBuffer,
         });
 
         setStatus(els.compileStatus, 'Published and set as the live AR target.', 'ok');
@@ -343,6 +352,14 @@
         renderFileList();
         await loadTargets();
       } catch (err) {
+        if (String(err.message).includes('Unauthorized') || String(err.message).includes('Session expired')) {
+          token = '';
+          localStorage.removeItem(TOKEN_KEY);
+          els.app.classList.add('hidden');
+          els.loginGate.classList.remove('hidden');
+          setStatus(els.loginError, err.message, 'err');
+          els.loginError.classList.remove('hidden');
+        }
         setStatus(els.compileStatus, err.message, 'err');
       }
     }

@@ -35,4 +35,10 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"password":"test-password"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
           curl -sf http://localhost:8080/api/targets -H "Authorization: Bearer $TOKEN" | grep -q '"targets"'
+          curl -sf -X POST http://localhost:8080/api/targets \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/octet-stream' \
+            -H 'X-Target-Name: CI%20test' \
+            -H 'X-Image-Names=%5B%22test.png%22%5D' \
+            --data-binary @targets.mind | grep -q '"id"'
           kill $PID

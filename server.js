@@ -129,7 +129,33 @@ async function handleApi(req, res, urlPath) {
   if (urlPath === '/api/targets' && req.method === 'POST') {
     if (!auth.requireAdmin(req, res)) return;
     try {
-      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      const contentType = (req.headers['content-type'] || '').toLowerCase();
+
+      // Preferred: raw binary upload (avoids huge base64 JSON payloads that crash fetch).
+      if (contentType.includes('application/octet-stream')) {
+        const mindBuffer = await readBody(req, 50 * 1024 * 1024);
+        if (!mindBuffer.length) return json(res, 400, { error: 'Empty upload body' });
+
+        let imageNames = [];
+        const rawNames = req.headers['x-image-names'];
+        if (rawNames) {
+          try {
+            imageNames = JSON.parse(decodeURIComponent(rawNames));
+          } catch {
+            try {
+              imageNames = JSON.parse(rawNames);
+            } catch {
+              return json(res, 400, { error: 'Invalid X-Image-Names header' });
+            }
+          }
+        }
+
+        const name = decodeURIComponent(req.headers['x-target-name'] || 'Untitled target set');
+        const entry = store.createTarget({ name, imageNames, mindBuffer });
+        return json(res, 201, entry);
+      }
+
+      const body = JSON.parse((await readBody(req, 50 * 1024 * 1024)).toString('utf8'));
       if (!body.mindBase64) return json(res, 400, { error: 'mindBase64 is required' });
       const mindBuffer = Buffer.from(body.mindBase64, 'base64');
       if (!mindBuffer.length) return json(res, 400, { error: 'mindBase64 is empty' });
@@ -141,6 +167,7 @@ async function handleApi(req, res, urlPath) {
       });
       return json(res, 201, entry);
     } catch (err) {
+      console.error('POST /api/targets failed:', err);
       const status = err.message === 'Payload too large' ? 413 : 400;
       return json(res, status, { error: err.message || 'Invalid request body' });
     }
