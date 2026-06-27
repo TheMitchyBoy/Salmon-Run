@@ -20,6 +20,7 @@ const REQUIRED = [
   'package.json',
   'salmon.glb',
   'targets.mind',
+  'marker-reference.jpg',
   'vendor/aframe-1.6.0.min.js',
   'vendor/mindar-image-aframe.prod.js',
   'vendor/aframe-extras-7.2.0.min.js',

@@ -90,7 +90,21 @@
   </div>
 
   <script>
+    function normalizeGrayData(data) {
+      if (!data) return null;
+      if (data instanceof Uint8Array) return data;
+      if (ArrayBuffer.isView(data)) {
+        return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+      }
+      if (Array.isArray(data)) return new Uint8Array(data);
+      if (typeof data === 'object') return new Uint8Array(Object.values(data));
+      return null;
+    }
+
     function grayImageToCanvas(targetImage) {
+      const pixels = normalizeGrayData(targetImage.data);
+      if (!pixels) return null;
+
       const canvas = document.createElement('canvas');
       canvas.width = targetImage.width;
       canvas.height = targetImage.height;
@@ -100,12 +114,86 @@
       const alpha = 0xff << 24;
       for (let c = 0; c < targetImage.width; c++) {
         for (let r = 0; r < targetImage.height; r++) {
-          const pix = targetImage.data[r * targetImage.width + c];
+          const pix = pixels[r * targetImage.width + c];
           buf[r * canvas.width + c] = alpha | (pix << 16) | (pix << 8) | pix;
         }
       }
       ctx.putImageData(imageData, 0, 0);
       return canvas;
+    }
+
+    function trackingLayerToCanvas(layer) {
+      const pixels = normalizeGrayData(layer.data);
+      if (!pixels || !layer.width || !layer.height) return null;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = layer.width;
+      canvas.height = layer.height;
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.createImageData(layer.width, layer.height);
+      const out = imageData.data;
+      const count = layer.width * layer.height;
+      for (let i = 0; i < count; i++) {
+        const v = pixels[i] ?? 255;
+        const off = i * 4;
+        out[off] = v;
+        out[off + 1] = v;
+        out[off + 2] = v;
+        out[off + 3] = 255;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      return canvas;
+    }
+
+    function featurePointsToCanvas(scale) {
+      const canvas = document.createElement('canvas');
+      canvas.width = scale.width;
+      canvas.height = scale.height;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#111';
+      for (const p of scale.maximaPoints || []) {
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2);
+      }
+      ctx.fillStyle = '#888';
+      for (const p of scale.minimaPoints || []) {
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+      }
+      return canvas;
+    }
+
+    function markerCanvasFromMindData(data) {
+      if (data.targetImage?.data) {
+        const canvas = grayImageToCanvas(data.targetImage);
+        if (canvas) {
+          return {
+            canvas,
+            label: 'Marker — print or display at full size',
+          };
+        }
+      }
+
+      const tracking = data.trackingData?.[0];
+      if (tracking) {
+        const canvas = trackingLayerToCanvas(tracking);
+        if (canvas) {
+          return {
+            canvas,
+            label: 'Marker preview (from compiled target) — print or display at full size',
+          };
+        }
+      }
+
+      const matching = data.matchingData?.[0];
+      if (matching) {
+        return {
+          canvas: featurePointsToCanvas(matching),
+          label: 'Feature map preview — re-upload the source image in admin for a printable marker',
+        };
+      }
+
+      return null;
     }
 
     async function loadFromPreview() {
@@ -128,6 +216,26 @@
       return true;
     }
 
+    async function loadFromStaticReference() {
+      const res = await fetch('/marker-reference.jpg');
+      if (!res.ok) return false;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = url;
+      });
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = '<div class="marker-wrap"></div><p class="label">Bundled marker — print or display at full size</p>';
+      card.querySelector('.marker-wrap').appendChild(img);
+      document.getElementById('markers').appendChild(card);
+      URL.revokeObjectURL(url);
+      return true;
+    }
+
     async function loadFromMind() {
       const res = await fetch('./targets.mind');
       if (!res.ok) throw new Error('Could not load targets.mind');
@@ -139,15 +247,17 @@
       }
       const container = document.getElementById('markers');
       dataList.forEach((data, idx) => {
-        const src = data.targetImage || data.imageList?.[0] || data.trackingImageList?.[0];
-        if (!src) return;
+        const rendered = markerCanvasFromMindData(data);
+        if (!rendered) return;
         const card = document.createElement('div');
         card.className = 'card';
-        card.innerHTML = `<div class="marker-wrap"></div><p class="label">Marker ${idx + 1} — print or display at full size</p>`;
-        card.querySelector('.marker-wrap').appendChild(grayImageToCanvas(src));
+        card.innerHTML = `<div class="marker-wrap"></div><p class="label">${rendered.label}</p>`;
+        card.querySelector('.marker-wrap').appendChild(rendered.canvas);
         container.appendChild(card);
       });
-      if (!container.children.length) throw new Error('No images inside targets.mind');
+      if (!container.children.length) {
+        throw new Error('No preview available in targets.mind — upload and publish a marker in admin.');
+      }
     }
 
     (async () => {
@@ -159,7 +269,10 @@
             `The AR app is tracking “${info.name}”. Print or display the image below, then scan it.`;
         }
         const hasPreview = await loadFromPreview();
-        if (!hasPreview) await loadFromMind();
+        if (!hasPreview) {
+          const hasStatic = await loadFromStaticReference();
+          if (!hasStatic) await loadFromMind();
+        }
         status.textContent = 'Ready — print this page or save the image, then open the AR app.';
       } catch (err) {
         status.textContent = err.message || 'Failed to load marker.';
