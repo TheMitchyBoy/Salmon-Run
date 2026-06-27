@@ -19,11 +19,20 @@ jobs:
       - name: Verify required assets
         run: npm test
 
-      - name: Smoke-test static server
+      - name: Smoke-test server and admin API
+        env:
+          ADMIN_PASSWORD: test-password
         run: |
           node server.js &
           PID=$!
           sleep 1
           curl -sf http://localhost:8080/ | grep -q 'Salmon AR'
           curl -sf -o /dev/null -w '%{http_code}' http://localhost:8080/salmon.glb | grep -q 200
+          curl -sf http://localhost:8080/api/health | grep -q '"ok":true'
+          curl -sf -o /dev/null -w '%{http_code}' http://localhost:8080/api/targets/active | grep -q 200
+          curl -sf http://localhost:8080/admin.html | grep -q 'Target compiler'
+          TOKEN=$(curl -sf -X POST http://localhost:8080/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"password":"test-password"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+          curl -sf http://localhost:8080/api/targets -H "Authorization: Bearer $TOKEN" | grep -q '"targets"'
           kill $PID

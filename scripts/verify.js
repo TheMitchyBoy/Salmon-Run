@@ -10,8 +10,11 @@ const ROOT = path.join(__dirname, '..');
 
 const REQUIRED = [
   'index.html',
+  'admin.html',
   'loading-test.html',
   'server.js',
+  'lib/store.js',
+  'lib/auth.js',
   'package.json',
   'salmon.glb',
   'targets.mind',

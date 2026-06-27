@@ -78,10 +78,51 @@ flowchart LR
   D --> E[Drift + swim animations]
 ```
 
-1. **Marker** — A printed sign is compiled into `targets.mind` with the [MindAR compiler](https://hiukim.github.io/mind-ar-js-doc/tools/compile).
+1. **Marker** — A printed sign is compiled into a `.mind` target file (via the built-in admin dashboard or the [MindAR compiler](https://hiukim.github.io/mind-ar-js-doc/tools/compile)).
 2. **Tracking** — MindAR watches the camera feed and locks virtual content to the marker.
 3. **Rendering** — A-Frame places three `salmon.glb` models on the marker, each with procedural drift (upstream motion) and swim (tail-wag + bob).
-4. **Serving** — A tiny Node static server (`server.js`) delivers assets over HTTPS in production.
+4. **Serving** — The Node server (`server.js`) delivers the AR app, API, and stored target sets over HTTPS in production.
+
+---
+
+## Admin dashboard — compile & publish markers
+
+No need to use the external MindAR compiler site. This repo includes a built-in admin UI that uses the **same MindAR compiler engine** bundled in `vendor/`.
+
+| | |
+|---|---|
+| **URL** | `/admin.html` on your deployed site |
+| **Auth** | `ADMIN_PASSWORD` environment variable |
+| **Storage** | Compiled `.mind` files in `data/` (auto-seeded from bundled `targets.mind` on first run) |
+
+### Workflow
+
+1. Set `ADMIN_PASSWORD` in Railway (or copy `.env.example` locally).
+2. Open **`https://your-app.up.railway.app/admin.html`** and sign in.
+3. **Drop one or more marker images** (PNG/JPG) — each image becomes a trackable target.
+4. Click **Compile** — feature points are visualized (same as the official MindAR tool).
+5. Click **Publish to live app** — the compiled target is saved and set as the active marker for the AR experience.
+
+The main app at `/` loads the active target from `GET /api/targets/active` automatically.
+
+### Persistence on Railway
+
+By default, `data/` lives on the container filesystem and **resets on redeploy**. For production:
+
+- Mount a [Railway Volume](https://docs.railway.app/guides/volumes) at `/data` and set `DATA_DIR=/data`, or
+- Keep using the bundled `targets.mind` as your baseline and re-publish after deploys.
+
+### API (for integrations)
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/health` | — | Server status |
+| `POST /api/auth/login` | — | Returns bearer token |
+| `GET /api/targets/active` | — | Active `.mind` binary (used by AR app) |
+| `GET /api/targets` | Admin | List all target sets |
+| `POST /api/targets` | Admin | Upload compiled target (`mindBase64`, `name`, `imageNames`) |
+| `PUT /api/targets/:id/activate` | Admin | Switch live marker |
+| `DELETE /api/targets/:id` | Admin | Remove a target set |
 
 ---
 
@@ -89,11 +130,16 @@ flowchart LR
 
 ```
 Salmon-Run/
-├── index.html           # Main WebAR experience
+├── index.html           # Main WebAR experience (loads /api/targets/active)
+├── admin.html           # Admin dashboard — compile & publish markers
 ├── loading-test.html    # Pipeline smoke test (MindAR example assets)
 ├── salmon.glb           # 3D salmon model
-├── targets.mind         # Compiled image-target data
-├── server.js            # Zero-dependency static server
+├── targets.mind         # Default/bundled image-target data
+├── server.js            # Static server + target API
+├── lib/
+│   ├── store.js         # File-based target database
+│   └── auth.js          # Admin session auth
+├── data/                # Runtime storage (gitignored; created on first run)
 ├── package.json
 ├── railway.json         # Railway deploy config
 ├── vendor/              # Bundled A-Frame, MindAR, aframe-extras
@@ -110,9 +156,10 @@ Salmon-Run/
 This repo is configured for [Railway](https://railway.app) out of the box. Railway terminates TLS, which WebAR requires for camera access.
 
 1. **New Project** → **Deploy from GitHub repo** → select **Salmon-Run**
-2. Railway detects Node, runs `npm start` (no env vars needed — `PORT` is injected)
-3. **Settings → Networking** → **Generate Domain** for a public `https://…up.railway.app` URL
-4. Open the URL on your phone and tap **Allow** for the camera
+2. Railway detects Node, runs `npm start` (`PORT` is injected automatically)
+3. **Variables** → add `ADMIN_PASSWORD` (enables `/admin.html`)
+4. **Settings → Networking** → **Generate Domain** for a public `https://…up.railway.app` URL
+5. Open the URL on your phone and tap **Allow** for the camera
 
 Every push to the connected branch redeploys automatically.
 
@@ -160,7 +207,7 @@ Try `loading-test.html` to isolate environment vs. asset issues.
 |------|----------------|
 | Change fish count, size, speed | `index.html` — `<a-gltf-model>` entities inside `[mindar-image-target]` |
 | Swap the 3D model | Replace `salmon.glb`, update `<a-asset-item>` |
-| New marker image | Recompile with MindAR compiler → replace `targets.mind` |
+| New marker image | Use `/admin.html` or recompile with MindAR → publish via API |
 | Status copy / UI colors | `#status` styles and JS event handlers in `index.html` |
 
 ---

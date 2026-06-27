@@ -5,6 +5,9 @@ node_modules/
 .env
 .env.*
 
+# Runtime data (compiled targets from admin dashboard)
+data/
+
 # Logs
 *.log
 npm-debug.log*

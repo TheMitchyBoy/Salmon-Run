@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Salmon AR — Target Compiler Admin</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐟</text></svg>" />
+  <script src="./vendor/mindar-image-aframe.prod.js"></script>
+  <style>
+    :root {
+      --bg: #0c1c28;
+      --panel: #122b3a;
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #eaf4f4;
+      --muted: #b9d2d6;
+      --accent: #4cd2b0;
+      --warn: #ffd27d;
+      --danger: #ff7d7d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, var(--bg), #123a4a);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 48px; }
+    h1 { margin: 0 0 6px; font-size: 28px; }
+    .sub { color: var(--muted); margin: 0 0 24px; }
+    .grid { display: grid; gap: 20px; }
+    @media (min-width: 900px) {
+      .grid { grid-template-columns: 1.1fr 0.9fr; align-items: start; }
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    .card h2 { margin: 0 0 14px; font-size: 18px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.25);
+      color: var(--text);
+      font-size: 15px;
+    }
+    .dropzone {
+      border: 2px dashed rgba(76, 210, 176, 0.45);
+      border-radius: 14px;
+      padding: 28px 16px;
+      text-align: center;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .dropzone.dragover { border-color: var(--accent); background: rgba(76, 210, 176, 0.08); }
+    .dropzone strong { color: var(--text); }
+    .file-list { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08); font-size: 13px;
+    }
+    .chip button {
+      border: none; background: transparent; color: var(--muted);
+      cursor: pointer; font-size: 14px; line-height: 1;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    button {
+      border: none; border-radius: 10px; padding: 10px 16px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    button.primary { background: var(--accent); color: #0c1c28; }
+    button.secondary { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+    button.danger { background: rgba(255, 125, 125, 0.18); color: var(--danger); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .progress { margin-top: 12px; font-size: 14px; color: var(--warn); min-height: 20px; }
+    .status { margin-top: 10px; font-size: 14px; color: var(--muted); }
+    .status.ok { color: var(--accent); }
+    .status.err { color: var(--danger); }
+    .preview-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px; margin-top: 14px;
+    }
+    .preview-grid canvas {
+      width: 100%; height: auto; border-radius: 10px;
+      border: 1px solid var(--border); background: #000;
+    }
+    .target-list { display: grid; gap: 10px; }
+    .target-item {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 12px 14px; border-radius: 12px; background: rgba(0, 0, 0, 0.2);
+      border: 1px solid transparent;
+    }
+    .target-item.active { border-color: rgba(76, 210, 176, 0.45); }
+    .target-meta { min-width: 0; }
+    .target-meta strong { display: block; font-size: 14px; }
+    .target-meta span { font-size: 12px; color: var(--muted); }
+    .target-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .login-gate { max-width: 420px; margin: 12vh auto 0; }
+    .hidden { display: none !important; }
+    .pill {
+      display: inline-block; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.5px; padding: 3px 8px; border-radius: 999px;
+      background: rgba(76, 210, 176, 0.18); color: var(--accent);
+    }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="login-gate" class="login-gate card hidden">
+      <h1>Admin login</h1>
+      <p class="sub">Enter the server <code>ADMIN_PASSWORD</code> to compile and manage AR markers.</p>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" />
+      <div class="actions">
+        <button class="primary" id="login-btn">Sign in</button>
+      </div>
+      <p class="status err hidden" id="login-error"></p>
+    </div>
+
+    <div id="app" class="hidden">
+      <h1>Target compiler <span class="pill">Admin</span></h1>
+      <p class="sub">Upload marker images, compile them with MindAR, and publish to the live AR app. Same engine as the <a href="https://hiukim.github.io/mind-ar-js-doc/tools/compile/" target="_blank" rel="noopener">official MindAR compiler</a>.</p>
+
+      <div class="grid">
+        <section class="card">
+          <h2>1. Upload images</h2>
+          <label for="set-name">Target set name</label>
+          <input id="set-name" type="text" placeholder="e.g. Creek sign — summer 2026" />
+
+          <div style="height:14px"></div>
+          <div class="dropzone" id="dropzone">
+            <strong>Drop PNG/JPG images here</strong><br />
+            or click to browse · multiple markers supported
+            <input id="file-input" type="file" accept="image/png,image/jpeg,image/jpg,image/webp" multiple hidden />
+          </div>
+          <div class="file-list" id="file-list"></div>
+
+          <div class="actions">
+            <button class="primary" id="compile-btn" disabled>Compile</button>
+            <button class="secondary" id="clear-btn" disabled>Clear</button>
+            <button class="primary" id="publish-btn" disabled>Publish to live app</button>
+          </div>
+          <div class="progress" id="progress"></div>
+          <div class="status" id="compile-status"></div>
+          <div class="preview-grid" id="preview-grid"></div>
+        </section>
+
+        <section class="card">
+          <h2>2. Published target sets</h2>
+          <p class="status" id="library-status">Loading…</p>
+          <div class="target-list" id="target-list"></div>
+          <div class="actions" style="margin-top:16px">
+            <button class="secondary" id="refresh-btn">Refresh</button>
+            <a href="/" style="align-self:center;font-size:14px">Open AR app →</a>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const TOKEN_KEY = 'salmon-ar-admin-token';
+    let token = localStorage.getItem(TOKEN_KEY) || '';
+    let pendingFiles = [];
+    let compiledBuffer = null;
+    let compiler = null;
+
+    const els = {
+      loginGate: document.getElementById('login-gate'),
+      app: document.getElementById('app'),
+      password: document.getElementById('password'),
+      loginBtn: document.getElementById('login-btn'),
+      loginError: document.getElementById('login-error'),
+      dropzone: document.getElementById('dropzone'),
+      fileInput: document.getElementById('file-input'),
+      fileList: document.getElementById('file-list'),
+      setName: document.getElementById('set-name'),
+      compileBtn: document.getElementById('compile-btn'),
+      clearBtn: document.getElementById('clear-btn'),
+      publishBtn: document.getElementById('publish-btn'),
+      progress: document.getElementById('progress'),
+      compileStatus: document.getElementById('compile-status'),
+      previewGrid: document.getElementById('preview-grid'),
+      targetList: document.getElementById('target-list'),
+      libraryStatus: document.getElementById('library-status'),
+      refreshBtn: document.getElementById('refresh-btn'),
+    };
+
+    function authHeaders() {
+      return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, options);
+      const isJson = (res.headers.get('content-type') || '').includes('application/json');
+      const body = isJson ? await res.json() : null;
+      if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`);
+      return body;
+    }
+
+    function setStatus(el, text, kind) {
+      el.textContent = text || '';
+      el.classList.remove('ok', 'err');
+      if (kind) el.classList.add(kind);
+    }
+
+    function renderFileList() {
+      els.fileList.innerHTML = '';
+      pendingFiles.forEach((file, idx) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.innerHTML = `${file.name} <button type="button" aria-label="Remove">×</button>`;
+        chip.querySelector('button').onclick = () => {
+          pendingFiles.splice(idx, 1);
+          compiledBuffer = null;
+          renderFileList();
+          updateButtons();
+        };
+        els.fileList.appendChild(chip);
+      });
+      updateButtons();
+    }
+
+    function updateButtons() {
+      const hasFiles = pendingFiles.length > 0;
+      els.compileBtn.disabled = !hasFiles;
+      els.clearBtn.disabled = !hasFiles && !compiledBuffer;
+      els.publishBtn.disabled = !compiledBuffer;
+    }
+
+    function loadImage(file) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = URL.createObjectURL(file);
+      });
+    }
+
+    function showFeaturePreview(data) {
+      const draw = (targetImage, points) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = targetImage.width;
+        canvas.height = targetImage.height;
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const buf = new Uint32Array(imageData.data.buffer);
+        const alpha = 0xff << 24;
+
+        for (let c = 0; c < targetImage.width; c++) {
+          for (let r = 0; r < targetImage.height; r++) {
+            const pix = targetImage.data[r * targetImage.width + c];
+            buf[r * canvas.width + c] = alpha | (pix << 16) | (pix << 8) | pix;
+          }
+        }
+
+        const green = (0xff << 24) | (0x00 << 16) | (0xff << 8) | 0x00;
+        for (const p of points) {
+          const offset = p.x + p.y * canvas.width;
+          for (let size = 1; size <= 4; size++) {
+            buf[offset - size] = green;
+            buf[offset + size] = green;
+            buf[offset - size * canvas.width] = green;
+            buf[offset + size * canvas.width] = green;
+          }
+        }
+        ctx.putImageData(imageData, 0, 0);
+        els.previewGrid.appendChild(canvas);
+      };
+
+      for (let i = 0; i < data.trackingImageList.length; i++) {
+        const points = data.trackingData[i].points.map((p) => ({
+          x: Math.round(p.x),
+          y: Math.round(p.y),
+        }));
+        draw(data.trackingImageList[i], points);
+      }
+    }
+
+    async function compileFiles() {
+      if (!window.MINDAR?.IMAGE?.Compiler) {
+        setStatus(els.compileStatus, 'MindAR compiler failed to load.', 'err');
+        return;
+      }
+
+      compiler = compiler || new window.MINDAR.IMAGE.Compiler();
+      els.previewGrid.innerHTML = '';
+      compiledBuffer = null;
+      updateButtons();
+      setStatus(els.compileStatus, '', '');
+      els.progress.textContent = 'Preparing images…';
+
+      try {
+        const images = [];
+        for (const file of pendingFiles) images.push(await loadImage(file));
+
+        const dataList = await compiler.compileImageTargets(images, (p) => {
+          els.progress.textContent = `Compiling… ${p.toFixed(1)}%`;
+        });
+
+        for (const data of dataList) showFeaturePreview(data);
+        compiledBuffer = await compiler.exportData();
+        els.progress.textContent = 'Compilation complete.';
+        setStatus(els.compileStatus, `Ready to publish · ${pendingFiles.length} image(s) · ${(compiledBuffer.byteLength / 1024).toFixed(1)} KB`, 'ok');
+        updateButtons();
+      } catch (err) {
+        els.progress.textContent = '';
+        setStatus(els.compileStatus, err.message || 'Compilation failed.', 'err');
+      }
+    }
+
+    async function publishTarget() {
+      if (!compiledBuffer) return;
+      setStatus(els.compileStatus, 'Uploading…', '');
+      try {
+        const bytes = new Uint8Array(compiledBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        const mindBase64 = btoa(binary);
+
+        await api('/api/targets', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            name: els.setName.value.trim() || `Target set ${new Date().toLocaleString()}`,
+            imageNames: pendingFiles.map((f) => f.name),
+            mindBase64,
+          }),
+        });
+
+        setStatus(els.compileStatus, 'Published and set as the live AR target.', 'ok');
+        compiledBuffer = null;
+        pendingFiles = [];
+        renderFileList();
+        await loadTargets();
+      } catch (err) {
+        setStatus(els.compileStatus, err.message, 'err');
+      }
+    }
+
+    function renderTargets(data) {
+      els.targetList.innerHTML = '';
+      if (!data.targets.length) {
+        setStatus(els.libraryStatus, 'No target sets yet. Compile and publish one.', '');
+        return;
+      }
+      setStatus(els.libraryStatus, `${data.targets.length} set(s) · active: ${data.activeId || 'none'}`, 'ok');
+
+      for (const t of data.targets) {
+        const row = document.createElement('div');
+        row.className = 'target-item' + (t.active ? ' active' : '');
+        row.innerHTML = `
+          <div class="target-meta">
+            <strong>${t.name}</strong>
+            <span>${t.imageCount} image(s) · ${new Date(t.createdAt).toLocaleString()}</span>
+          </div>
+          <div class="target-actions"></div>
+        `;
+        const actions = row.querySelector('.target-actions');
+
+        if (!t.active) {
+          const activate = document.createElement('button');
+          activate.className = 'secondary';
+          activate.textContent = 'Activate';
+          activate.onclick = async () => {
+            await api(`/api/targets/${t.id}/activate`, { method: 'PUT', headers: authHeaders() });
+            await loadTargets();
+          };
+          actions.appendChild(activate);
+        } else {
+          const live = document.createElement('span');
+          live.className = 'pill';
+          live.textContent = 'Live';
+          actions.appendChild(live);
+        }
+
+        const del = document.createElement('button');
+        del.className = 'danger';
+        del.textContent = 'Delete';
+        del.onclick = async () => {
+          if (!confirm(`Delete "${t.name}"?`)) return;
+          await api(`/api/targets/${t.id}`, { method: 'DELETE', headers: authHeaders() });
+          await loadTargets();
+        };
+        actions.appendChild(del);
+        els.targetList.appendChild(row);
+      }
+    }
+
+    async function loadTargets() {
+      try {
+        const data = await api('/api/targets', { headers: authHeaders() });
+        renderTargets(data);
+      } catch (err) {
+        setStatus(els.libraryStatus, err.message, 'err');
+      }
+    }
+
+    async function boot() {
+      const health = await api('/api/health');
+      if (!health.adminEnabled) {
+        els.loginGate.classList.remove('hidden');
+        setStatus(els.loginError, 'Admin is disabled on this server. Set ADMIN_PASSWORD in Railway env vars.', 'err');
+        els.loginError.classList.remove('hidden');
+        els.loginBtn.disabled = true;
+        return;
+      }
+
+      if (!token) {
+        els.loginGate.classList.remove('hidden');
+        return;
+      }
+
+      try {
+        await loadTargets();
+        els.app.classList.remove('hidden');
+      } catch {
+        token = '';
+        localStorage.removeItem(TOKEN_KEY);
+        els.loginGate.classList.remove('hidden');
+      }
+    }
+
+    els.loginBtn.onclick = async () => {
+      setStatus(els.loginError, '', '');
+      try {
+        const data = await api('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: els.password.value }),
+        });
+        token = data.token;
+        localStorage.setItem(TOKEN_KEY, token);
+        els.loginGate.classList.add('hidden');
+        els.app.classList.remove('hidden');
+        await loadTargets();
+      } catch (err) {
+        setStatus(els.loginError, err.message, 'err');
+        els.loginError.classList.remove('hidden');
+      }
+    };
+
+    els.password.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') els.loginBtn.click();
+    });
+
+    els.dropzone.onclick = () => els.fileInput.click();
+    els.dropzone.addEventListener('dragover', (e) => { e.preventDefault(); els.dropzone.classList.add('dragover'); });
+    els.dropzone.addEventListener('dragleave', () => els.dropzone.classList.remove('dragover'));
+    els.dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      els.dropzone.classList.remove('dragover');
+      pendingFiles.push(...Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/')));
+      compiledBuffer = null;
+      renderFileList();
+    });
+    els.fileInput.onchange = () => {
+      pendingFiles.push(...Array.from(els.fileInput.files));
+      els.fileInput.value = '';
+      compiledBuffer = null;
+      renderFileList();
+    };
+
+    els.compileBtn.onclick = compileFiles;
+    els.clearBtn.onclick = () => {
+      pendingFiles = [];
+      compiledBuffer = null;
+      els.previewGrid.innerHTML = '';
+      els.progress.textContent = '';
+      setStatus(els.compileStatus, '', '');
+      renderFileList();
+    };
+    els.publishBtn.onclick = publishTarget;
+    els.refreshBtn.onclick = loadTargets;
+
+    boot();
+  </script>
+</body>
+</html>

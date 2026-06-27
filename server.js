@@ -1,20 +1,17 @@
 'use strict';
 
-// Minimal zero-dependency static file server for Railway (and any host that sets
-// $PORT). Railway terminates TLS in front of the app, so the public URL is
-// https:// — which WebAR requires for camera access. The app itself just needs
-// to serve index.html and its assets on $PORT.
-
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { URL } = require('url');
+
+const store = require('./lib/store');
+const auth = require('./lib/auth');
 
 const PORT = process.env.PORT || 8080;
 const HOST = '0.0.0.0';
 const ROOT = __dirname;
 
-// Explicit MIME types so binary AR assets are served correctly. Browsers are
-// forgiving for fetch(), but getting these right avoids subtle decode issues.
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -34,46 +31,177 @@ const MIME = {
   '.map': 'application/json; charset=utf-8',
 };
 
-function send(res, status, body, headers) {
-  res.writeHead(status, headers || { 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end(body);
+function json(res, status, body) {
+  const payload = JSON.stringify(body);
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(payload),
+  });
+  res.end(payload);
 }
 
-const server = http.createServer((req, res) => {
-  if (req.method !== 'GET' && req.method !== 'HEAD') {
-    return send(res, 405, 'Method Not Allowed');
-  }
+function readBody(req, limit = 25 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > limit) {
+        reject(new Error('Payload too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
 
-  let urlPath = decodeURIComponent(req.url.split('?')[0]);
-  if (urlPath === '/' || urlPath === '') urlPath = '/index.html';
-
-  // Resolve and guard against path traversal outside ROOT.
-  const filePath = path.normalize(path.join(ROOT, urlPath));
-  if (!filePath.startsWith(ROOT)) {
-    return send(res, 403, 'Forbidden');
-  }
+function serveFile(res, filePath, reqMethod = 'GET') {
+  const ext = path.extname(filePath).toLowerCase();
+  const headers = {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600',
+  };
 
   fs.stat(filePath, (err, stat) => {
     if (err || !stat.isFile()) {
-      return send(res, 404, 'Not Found');
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not Found');
+      return;
     }
-    const ext = path.extname(filePath).toLowerCase();
-    const headers = {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Content-Length': stat.size,
-      // Camera/AR needs a secure context; Railway provides https. These headers
-      // are harmless and help some browsers with WASM threading if ever needed.
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600',
-    };
-    if (req.method === 'HEAD') {
+
+    headers['Content-Length'] = stat.size;
+    if (reqMethod === 'HEAD') {
       res.writeHead(200, headers);
-      return res.end();
+      res.end();
+      return;
     }
+
     res.writeHead(200, headers);
     fs.createReadStream(filePath).pipe(res);
   });
+}
+
+async function handleApi(req, res, urlPath) {
+  if (urlPath === '/api/health' && req.method === 'GET') {
+    return json(res, 200, {
+      ok: true,
+      adminEnabled: auth.adminEnabled(),
+      dataDir: store.DATA_DIR,
+    });
+  }
+
+  if (urlPath === '/api/auth/login' && req.method === 'POST') {
+    try {
+      const body = JSON.parse((await readBody(req, 1024 * 64)).toString('utf8'));
+      const result = auth.login(body.password || '');
+      if (!result.ok) return json(res, 401, { error: result.error });
+      return json(res, 200, { token: result.token });
+    } catch {
+      return json(res, 400, { error: 'Invalid request body' });
+    }
+  }
+
+  if (urlPath === '/api/targets/active' && req.method === 'GET') {
+    const active = store.getActiveTarget();
+    if (!active) {
+      return json(res, 404, { error: 'No active target set' });
+    }
+    const headers = {
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': fs.statSync(active.filePath).size,
+      'Cache-Control': 'no-cache',
+      'X-Target-Id': active.meta.id,
+      'X-Target-Name': encodeURIComponent(active.meta.name),
+    };
+    res.writeHead(200, headers);
+    fs.createReadStream(active.filePath).pipe(res);
+    return;
+  }
+
+  if (urlPath === '/api/targets' && req.method === 'GET') {
+    if (!auth.requireAdmin(req, res)) return;
+    return json(res, 200, store.listTargets());
+  }
+
+  if (urlPath === '/api/targets' && req.method === 'POST') {
+    if (!auth.requireAdmin(req, res)) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      if (!body.mindBase64) return json(res, 400, { error: 'mindBase64 is required' });
+      const mindBuffer = Buffer.from(body.mindBase64, 'base64');
+      if (!mindBuffer.length) return json(res, 400, { error: 'mindBase64 is empty' });
+
+      const entry = store.createTarget({
+        name: body.name,
+        imageNames: body.imageNames || [],
+        mindBuffer,
+      });
+      return json(res, 201, entry);
+    } catch (err) {
+      const status = err.message === 'Payload too large' ? 413 : 400;
+      return json(res, status, { error: err.message || 'Invalid request body' });
+    }
+  }
+
+  const activateMatch = urlPath.match(/^\/api\/targets\/([a-f0-9]+)\/activate$/);
+  if (activateMatch && req.method === 'PUT') {
+    if (!auth.requireAdmin(req, res)) return;
+    const ok = store.setActive(activateMatch[1]);
+    return json(res, ok ? 200 : 404, ok ? { ok: true } : { error: 'Target not found' });
+  }
+
+  const deleteMatch = urlPath.match(/^\/api\/targets\/([a-f0-9]+)$/);
+  if (deleteMatch && req.method === 'DELETE') {
+    if (!auth.requireAdmin(req, res)) return;
+    const ok = store.deleteTarget(deleteMatch[1]);
+    return json(res, ok ? 200 : 404, ok ? { ok: true } : { error: 'Target not found' });
+  }
+
+  res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify({ error: 'Not Found' }));
+}
+
+const server = http.createServer(async (req, res) => {
+  const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+
+  if (urlPath.startsWith('/api/')) {
+    try {
+      await handleApi(req, res, urlPath);
+    } catch (err) {
+      console.error('API error:', err);
+      json(res, 500, { error: 'Internal server error' });
+    }
+    return;
+  }
+
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Method Not Allowed');
+    return;
+  }
+
+  let staticPath = urlPath;
+  if (staticPath === '/' || staticPath === '') staticPath = '/index.html';
+
+  const filePath = path.normalize(path.join(ROOT, staticPath));
+  if (!filePath.startsWith(ROOT)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Forbidden');
+    return;
+  }
+
+  serveFile(res, filePath, req.method);
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Salmon AR static server listening on http://${HOST}:${PORT}`);
+  store.listTargets();
+  console.log(`Salmon AR server listening on http://${HOST}:${PORT}`);
+  console.log(`Admin dashboard: http://${HOST}:${PORT}/admin.html`);
+  console.log(`Data directory: ${store.DATA_DIR}`);
+  if (!auth.adminEnabled()) {
+    console.warn('ADMIN_PASSWORD is not set — admin uploads are disabled.');
+  }
 });
