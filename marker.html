@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Salmon AR — Marker reference</title>
+  <meta name="description" content="Print or display this image, then scan it with the Salmon AR app." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐟</text></svg>" />
+  <script src="./vendor/mindar-image-aframe.prod.js"></script>
+  <style>
+    :root {
+      --bg: #0c1c28;
+      --text: #eaf4f4;
+      --muted: #b9d2d6;
+      --accent: #4cd2b0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, system-ui, sans-serif;
+      background: linear-gradient(160deg, var(--bg), #123a4a);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px 16px 40px;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    .sub { color: var(--muted); margin: 0 0 20px; line-height: 1.5; }
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .marker-wrap {
+      background: #fff;
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+    }
+    .marker-wrap img, .marker-wrap canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
+    .label { font-size: 13px; color: var(--muted); margin-top: 10px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    a.btn, button.btn {
+      display: inline-block;
+      padding: 10px 16px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+    }
+    a.primary, button.primary { background: var(--accent); color: #0c1c28; }
+    a.secondary { background: rgba(255,255,255,0.1); color: var(--text); }
+    .tips { font-size: 14px; color: var(--muted); line-height: 1.55; }
+    .tips li { margin-bottom: 6px; }
+    #status { color: var(--muted); font-size: 14px; }
+    #status.err { color: #ff9a9a; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Marker reference</h1>
+    <p class="sub" id="intro">This is the exact image the AR app is looking for. Print it or open this page on another screen, then scan it with the AR app.</p>
+    <p id="status">Loading marker…</p>
+
+    <div id="markers"></div>
+
+    <div class="card tips">
+      <strong>Tips for reliable scanning</strong>
+      <ul>
+        <li>Use the <strong>same image</strong> shown below — not a similar photo or painting.</li>
+        <li>Good lighting, no glare. Hold the phone steady.</li>
+        <li>Fill most of the camera frame with the marker.</li>
+        <li>If you uploaded a new marker in admin, this page updates automatically.</li>
+      </ul>
+    </div>
+
+    <div class="actions">
+      <a class="btn primary" href="/">Open AR app</a>
+      <a class="btn secondary" href="/admin.html">Admin</a>
+    </div>
+  </div>
+
+  <script>
+    function grayImageToCanvas(targetImage) {
+      const canvas = document.createElement('canvas');
+      canvas.width = targetImage.width;
+      canvas.height = targetImage.height;
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.createImageData(canvas.width, canvas.height);
+      const buf = new Uint32Array(imageData.data.buffer);
+      const alpha = 0xff << 24;
+      for (let c = 0; c < targetImage.width; c++) {
+        for (let r = 0; r < targetImage.height; r++) {
+          const pix = targetImage.data[r * targetImage.width + c];
+          buf[r * canvas.width + c] = alpha | (pix << 16) | (pix << 8) | pix;
+        }
+      }
+      ctx.putImageData(imageData, 0, 0);
+      return canvas;
+    }
+
+    async function loadFromPreview() {
+      const res = await fetch('/api/targets/active/preview');
+      if (!res.ok) return false;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = url;
+      });
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = '<div class="marker-wrap"></div><p class="label">Uploaded marker (live)</p>';
+      card.querySelector('.marker-wrap').appendChild(img);
+      document.getElementById('markers').appendChild(card);
+      URL.revokeObjectURL(url);
+      return true;
+    }
+
+    async function loadFromMind() {
+      const res = await fetch('./targets.mind');
+      if (!res.ok) throw new Error('Could not load targets.mind');
+      const buf = await res.arrayBuffer();
+      const compiler = new window.MINDAR.IMAGE.Compiler();
+      const dataList = compiler.importData(buf);
+      const container = document.getElementById('markers');
+      dataList.forEach((data, idx) => {
+        const src = data.imageList?.[0] || data.trackingImageList?.[0];
+        if (!src) return;
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `<div class="marker-wrap"></div><p class="label">Marker ${idx + 1} — print or display at full size</p>`;
+        card.querySelector('.marker-wrap').appendChild(grayImageToCanvas(src));
+        container.appendChild(card);
+      });
+      if (!container.children.length) throw new Error('No images inside targets.mind');
+    }
+
+    (async () => {
+      const status = document.getElementById('status');
+      try {
+        const info = await fetch('/api/targets/active/info').then((r) => r.ok ? r.json() : null);
+        if (info?.name) {
+          document.getElementById('intro').textContent =
+            `The AR app is tracking “${info.name}”. Print or display the image below, then scan it.`;
+        }
+        const hasPreview = await loadFromPreview();
+        if (!hasPreview) await loadFromMind();
+        status.textContent = 'Ready — print this page or save the image, then open the AR app.';
+      } catch (err) {
+        status.textContent = err.message || 'Failed to load marker.';
+        status.classList.add('err');
+      }
+    })();
+  </script>
+</body>
+</html>

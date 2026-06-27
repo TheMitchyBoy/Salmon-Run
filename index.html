@@ -103,6 +103,50 @@
       vertical-align: middle;
     }
 
+    #marker-panel {
+      position: fixed;
+      right: 12px;
+      bottom: calc(env(safe-area-inset-bottom, 12px) + 12px);
+      z-index: 10;
+      max-width: 120px;
+      text-align: center;
+    }
+    #marker-panel img {
+      width: 100%;
+      border-radius: 10px;
+      border: 2px solid rgba(76, 210, 176, 0.6);
+      background: #fff;
+      display: none;
+    }
+    #marker-panel a {
+      display: inline-block;
+      margin-top: 6px;
+      font-size: 12px;
+      color: #4cd2b0;
+      text-decoration: none;
+      background: rgba(12, 28, 40, 0.72);
+      padding: 6px 10px;
+      border-radius: 999px;
+    }
+
+    #tips {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: calc(env(safe-area-inset-bottom, 12px) + 12px);
+      z-index: 9;
+      display: none;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(12, 28, 40, 0.88);
+      color: #eaf4f4;
+      font-size: 14px;
+      line-height: 1.45;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    #tips.show { display: block; }
+    #tips a { color: #4cd2b0; }
+
     /* Fatal/diagnostic overlay. Shown only when something goes wrong so the user
        gets a clear reason instead of staring at MindAR's loading spinner forever. */
     #fatal {
@@ -160,6 +204,17 @@
   <!-- Status pill. Starts as an instruction, switches to "running" once the sign is detected. -->
   <div id="status"><span class="dot"></span>Point your phone at the salmon sign</div>
 
+  <div id="marker-panel">
+    <img id="marker-thumb" alt="Marker to scan" />
+    <a href="/marker.html">View marker to scan</a>
+  </div>
+
+  <div id="tips">
+    Not detecting? Make sure you're scanning the <strong>exact</strong> image from
+    <a href="/marker.html">/marker.html</a> — not a similar photo or painting.
+    Use good light, hold steady, and fill the frame with the sign.
+  </div>
+
   <!-- Diagnostic overlay. Hidden until something fails; content is filled in by JS. -->
   <div id="fatal" role="alert" aria-live="assertive">
     <div class="card">
@@ -171,7 +226,7 @@
   </div>
 
   <a-scene
-    mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiScanning: yes; uiLoading: yes;"
+    mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiScanning: yes; uiLoading: yes; maxTrack: 1; warmupTolerance: 1; missTolerance: 2; filterMinCF: 0.001; filterBeta: 500;"
     color-space="sRGB"
     renderer="alpha: true; colorManagement: true, physicallyCorrectLights"
     vr-mode-ui="enabled: false"
@@ -245,7 +300,8 @@
     const sceneEl = document.querySelector('a-scene');
     const status = document.getElementById('status');
 
-    let arReady = false;   // MindAR engine + camera are live
+    let arReady = false;
+    let targetFound = false;
     let fatalShown = false;
 
     // Render the diagnostic overlay. This is the whole point of this file's error
@@ -357,9 +413,30 @@
       });
 
       sceneEl.addEventListener('loaded', () => {
+        fetch('/api/targets/active/info')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((info) => {
+            if (info?.name) {
+              status.innerHTML = '<span class="dot"></span>Scan for: ' + info.name;
+            }
+          })
+          .catch(() => {});
+
+        fetch('/api/targets/active/preview')
+          .then((r) => (r.ok ? r.blob() : null))
+          .then((blob) => {
+            if (!blob) return;
+            const img = document.getElementById('marker-thumb');
+            img.src = URL.createObjectURL(blob);
+            img.style.display = 'block';
+          })
+          .catch(() => {});
+
         const target = document.querySelector('[mindar-image-target]');
 
         target.addEventListener('targetFound', () => {
+          targetFound = true;
+          document.getElementById('tips').classList.remove('show');
           status.innerHTML = '<span class="dot"></span>The salmon are running';
         });
 
@@ -387,6 +464,12 @@
 
       // Watchdog: if the camera/engine never comes up, surface guidance instead of
       // leaving the user on a spinner with no idea what's wrong.
+      setTimeout(() => {
+        if (!targetFound && arReady && !fatalShown) {
+          document.getElementById('tips').classList.add('show');
+        }
+      }, 12000);
+
       setTimeout(() => {
         if (!arReady && !fatalShown) {
           showFatal(

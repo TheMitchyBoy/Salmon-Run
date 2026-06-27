@@ -176,11 +176,12 @@
 
   <script>
     const TOKEN_KEY = 'salmon-ar-admin-token';
-    const MAX_IMAGE_EDGE = 1280;
+    const MAX_IMAGE_EDGE = 1600;
     const MAX_UPLOAD_MB = 8;
     let token = localStorage.getItem(TOKEN_KEY) || '';
     let pendingFiles = [];
     let compiledBuffer = null;
+    let compiledImages = [];
     let compiler = null;
 
     const els = {
@@ -373,6 +374,7 @@
         });
 
         for (const data of dataList) showFeaturePreview(data);
+        compiledImages = images;
         compiledBuffer = await compiler.exportData();
         const kb = (compiledBuffer.byteLength / 1024).toFixed(1);
         els.progress.textContent = 'Compilation complete.';
@@ -385,6 +387,23 @@
         els.progress.textContent = '';
         setStatus(els.compileStatus, err.message || 'Compilation failed.', 'err');
       }
+    }
+
+    async function uploadPreview(targetId, img) {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.88));
+      if (!blob) return;
+      await api(`/api/targets/${targetId}/preview`, {
+        method: 'POST',
+        headers: {
+          ...authHeaders(false),
+          'Content-Type': 'image/jpeg',
+        },
+        body: blob,
+      });
     }
 
     async function publishTarget() {
@@ -410,7 +429,7 @@
         const imageNames = pendingFiles.map((f) => f.name);
         const blob = new Blob([compiledBuffer], { type: 'application/octet-stream' });
 
-        await api('/api/targets', {
+        const entry = await api('/api/targets', {
           method: 'POST',
           headers: {
             ...authHeaders(false),
@@ -421,8 +440,17 @@
           body: blob,
         });
 
+        if (compiledImages[0]) {
+          try {
+            await uploadPreview(entry.id, compiledImages[0]);
+          } catch {
+            /* preview is optional */
+          }
+        }
+
         setStatus(els.compileStatus, 'Published and set as the live AR target.', 'ok');
         compiledBuffer = null;
+        compiledImages = [];
         pendingFiles = [];
         renderFileList();
         await loadTargets();
@@ -586,6 +614,7 @@
     els.clearBtn.onclick = () => {
       pendingFiles = [];
       compiledBuffer = null;
+      compiledImages = [];
       els.previewGrid.innerHTML = '';
       els.progress.textContent = '';
       setStatus(els.compileStatus, '', '');

@@ -144,6 +144,44 @@ async function handleApi(req, res, urlPath) {
     return json(res, 200, { ok: true });
   }
 
+  if (urlPath === '/api/targets/active/info' && req.method === 'GET') {
+    const info = store.getActiveInfo();
+    if (!info) return json(res, 404, { error: 'No active target set' });
+    return json(res, 200, info);
+  }
+
+  const previewMatch = urlPath.match(/^\/api\/targets\/([a-f0-9]+)\/preview$/);
+  if (previewMatch && req.method === 'POST') {
+    if (!auth.requireAdmin(req, res)) return;
+    try {
+      const buf = await readBody(req, 2 * 1024 * 1024);
+      if (!buf.length) return json(res, 400, { error: 'Empty preview' });
+      store.savePreview(previewMatch[1], buf);
+      return json(res, 200, { ok: true });
+    } catch (err) {
+      return json(res, 400, { error: err.message || 'Invalid preview' });
+    }
+  }
+
+  if (urlPath === '/api/targets/active/preview' && (req.method === 'GET' || req.method === 'HEAD')) {
+    const preview = store.getActivePreview();
+    if (!preview) {
+      return json(res, 404, { error: 'No preview image for active target' });
+    }
+    const headers = {
+      'Content-Type': 'image/jpeg',
+      'Cache-Control': 'no-cache',
+      'Content-Length': fs.statSync(preview.filePath).size,
+    };
+    if (req.method === 'HEAD') {
+      res.writeHead(200, headers);
+      return res.end();
+    }
+    res.writeHead(200, headers);
+    fs.createReadStream(preview.filePath).pipe(res);
+    return;
+  }
+
   if ((urlPath === '/api/targets/active') && (req.method === 'GET' || req.method === 'HEAD')) {
     const active = store.getActiveTarget();
     if (!active) {
