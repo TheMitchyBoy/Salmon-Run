@@ -58,10 +58,32 @@
   </script>
 
   <style>
-    /* Keep the UI almost invisible — the salmon are the thing people should look at. */
-    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; }
-    a-scene { display: block; }
-    a-scene .a-canvas { background: transparent !important; }
+    /* Full-viewport AR — embedded/partial scenes leave white gaps around the camera feed. */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: -apple-system, system-ui, sans-serif;
+    }
+
+    a-scene {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    a-scene .a-canvas {
+      background: transparent !important;
+    }
+
+    /* MindAR appends the camera video to <body> — ensure it fills the screen. */
+    body > video {
+      object-fit: cover;
+    }
 
     #status {
       position: fixed;
@@ -156,7 +178,6 @@
   </div>
 
   <a-scene
-    embedded
     mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiScanning: yes; uiLoading: yes;"
     color-space="sRGB"
     renderer="alpha: true; colorManagement: true, physicallyCorrectLights"
@@ -315,6 +336,11 @@
       sceneEl.addEventListener('arReady', () => {
         arReady = true;
         status.innerHTML = '<span class="dot"></span>Scanning — slowly fill the frame with your marker sign';
+
+        // Belt-and-suspenders: some devices leave gaps if MindAR video sizing is off.
+        document.querySelectorAll('body > video').forEach((video) => {
+          video.style.objectFit = 'cover';
+        });
       });
 
       sceneEl.addEventListener('arError', () => {
